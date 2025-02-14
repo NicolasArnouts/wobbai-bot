@@ -1,0 +1,102 @@
+services:
+  api:
+    build: .
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - csv_data:/data
+    ports:
+      - "8000:8000"
+    environment:
+      # Database Configuration
+      - DATABASE_URL=postgresql://postgres:secret@postgres:5432/postgres
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # LLM Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_worker:
+    build: .
+    command: celery -A app.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+      - csv_data:/data
+    environment:
+      # Database Configuration
+      - DATABASE_URL=postgresql://postgres:secret@postgres:5432/postgres
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # LLM Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  discord_bot:
+    build: .
+    command: python discord_bot/bot.py
+    volumes:
+      - .:/app
+    environment:
+      - API_BASE=http://api:8000
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      # Add these in case bot needs direct LLM access
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  csv_data:
+    driver: local

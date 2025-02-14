@@ -1,0 +1,35 @@
+# API Dependencies
+fastapi>=0.103.0
+uvicorn[standard]>=0.23.2
+python-multipart>=0.0.6
+pydantic>=2.3.0
+
+# Database
+psycopg2-binary>=2.9.7
+duckdb>=0.8.1
+
+# Task Queue
+celery>=5.3.4
+redis>=5.0.0
+
+# Discord Bot
+discord.py>=2.3.2
+requests>=2.31.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# LLM & Observability
+langfuse
+openai
+
+# Testing
+pytest>=7.4.2
+pytest-asyncio>=0.21.1
+black>=23.7.0
+isort>=5.12.0
+flake8>=6.1.0
+mypy>=1.5.1
+
+# Debugging
+debugpy>=1.8.0

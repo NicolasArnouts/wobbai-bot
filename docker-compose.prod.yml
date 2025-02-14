@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - csv_data:/data
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:secret@postgres:5432/postgres
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # LLM Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info
+    volumes:
+      - csv_data:/data
+    environment:
+      - DATABASE_URL=postgresql://postgres:secret@postgres:5432/postgres
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # LLM Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres
+
+  discord_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python discord_bot/bot.py
+    environment:
+      - API_BASE=http://api:8000
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      # LLM Configuration (in case bot needs direct LLM access)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:latest
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
+    driver: local
+  csv_data:
+    driver: local
