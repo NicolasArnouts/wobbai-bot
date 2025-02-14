@@ -55,6 +55,7 @@ async def ask_question(req: QueryRequest, request: Request) -> QueryResponse:
                 dataset_id=req.dataset_id,
                 version_id=version_id,
                 schema=schema,
+                user_id=req.user_id,
             )
 
             logger.info(f"Generated SQL: {generated_sql}")
