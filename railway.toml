@@ -1,7 +1,0 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "docker-compose.railway.yml"
-
-[deploy]
-healthcheckPath = "/health"
-restartPolicyType = "ALWAYS"
