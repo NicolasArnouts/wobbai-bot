@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "docker-compose.prod.yml"
+dockerfilePath = "docker-compose.railway.yml"
 
 [deploy]
 healthcheckPath = "/health"
