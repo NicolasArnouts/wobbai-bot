@@ -1,0 +1,148 @@
+name: CSV Query Bot CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          pytest
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Log in to GitHub Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=tag
+
+      - name: Build and push all services
+        run: |
+          # Build each service using compose
+          docker compose -f docker-compose.prod.yml build
+
+          # Tag and push each service
+          for service in api celery_worker discord_bot; do
+            docker tag ${service}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${service}:${{ github.sha }}
+            docker tag ${service}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${service}:latest
+            docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${service}:${{ github.sha }}
+            docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${service}:latest
+          done
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Copy docker-compose and .env to staging
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USERNAME }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          source: "docker-compose.prod.yml,.env.example"
+          target: "~/csv-query-bot"
+
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USERNAME }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd ~/csv-query-bot
+            cp .env.example .env
+            # Update environment variables
+            sed -i "s/your_discord_bot_token_here/${{ secrets.STAGING_DISCORD_TOKEN }}/g" .env
+            sed -i "s/your_openai_api_key_here/${{ secrets.STAGING_OPENAI_API_KEY }}/g" .env
+            sed -i "s/your_langfuse_public_key_here/${{ secrets.STAGING_LANGFUSE_PUBLIC_KEY }}/g" .env
+            sed -i "s/your_langfuse_secret_key_here/${{ secrets.STAGING_LANGFUSE_SECRET_KEY }}/g" .env
+
+            # Pull latest images
+            docker compose -f docker-compose.prod.yml pull
+
+            # Deploy with zero downtime
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Copy docker-compose and .env to production
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USERNAME }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: "docker-compose.prod.yml,.env.example"
+          target: "~/csv-query-bot"
+
+      - name: Deploy to production
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USERNAME }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd ~/csv-query-bot
+            cp .env.example .env
+            # Update environment variables
+            sed -i "s/your_discord_bot_token_here/${{ secrets.PROD_DISCORD_TOKEN }}/g" .env
+            sed -i "s/your_openai_api_key_here/${{ secrets.PROD_OPENAI_API_KEY }}/g" .env
+            sed -i "s/your_langfuse_public_key_here/${{ secrets.PROD_LANGFUSE_PUBLIC_KEY }}/g" .env
+            sed -i "s/your_langfuse_secret_key_here/${{ secrets.PROD_LANGFUSE_SECRET_KEY }}/g" .env
+
+            # Pull latest images
+            docker compose -f docker-compose.prod.yml pull
+
+            # Deploy with zero downtime
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
