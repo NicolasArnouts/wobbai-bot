@@ -11,6 +11,8 @@ from langfuse.openai import (
     openai,  # This modifies the openai module so calls are traced
 )
 
+from app.db.duckdb import execute_query
+
 # Initialize Langfuse configuration
 os.environ.setdefault("LANGFUSE_HOST", "https://cloud.langfuse.com")
 
@@ -37,7 +39,11 @@ class SQLGenerationError(Exception):
 
 @observe()
 def generate_sql_from_llm(
-    question: str, dataset_id: str, version_id: str, schema: List[Tuple[str, str]]
+    question: str,
+    dataset_id: str,
+    version_id: str,
+    schema: List[Tuple[str, str]],
+    user_id: str,
 ) -> str:
     """
     Generate SQL from a natural language question using an LLM.
@@ -58,24 +64,44 @@ def generate_sql_from_llm(
     try:
         table_name = f"{dataset_id}_v{version_id}"
 
+        # Get random sample data
+        sample_query = f'SELECT * FROM "{table_name}" ORDER BY RANDOM() LIMIT 100'
+        sample_data, error = execute_query(user_id, sample_query)
+
+        if error:
+            raise SQLGenerationError(f"Failed to get sample data: {error}")
+
         # Convert schema tuples into a formatted description
         schema_description = "\n".join(
             f"- {col_name} ({col_type})" for col_name, col_type in schema
         )
 
-        # Build system prompt with schema info and SQL guidelines
+        # Format sample data for the prompt
+        sample_data_str = "\nSample data (first few rows):\n"
+        # Include up to 5 rows as examples
+        for i, row in enumerate(sample_data[:5]):
+            sample_data_str += f"\nRow {i + 1}:\n"
+            for key, value in row.items():
+                sample_data_str += f"  {key}: {value}\n"
+
+        # Build system prompt with schema info, sample data, and SQL guidelines
         system_prompt = f"""You are an SQL expert that converts natural language questions into DuckDB SQL queries.
 The table name is "{table_name}" with these columns:
 
 {schema_description}
 
+{sample_data_str}
+
 Important rules:
 1. Only return the SQL query, no explanations or additional text
 2. Use proper column names and types as shown above
 3. Always put column names in double quotes to handle special characters
-4. Limit results to 1000 rows unless specifically asked for more
-5. For aggregations, use meaningful column aliases
-6. If the question is unclear, return a simple 'SELECT * FROM "{table_name}" LIMIT 10'"""
+4. When working with the "Value" column for numeric operations:
+   - Values contain commas as thousand separators (e.g., '728,225')
+   - Use REPLACE("Value", ',', '')::BIGINT for numeric calculations
+5. Limit results to 1000 rows unless specifically asked for more
+6. For aggregations, use meaningful column aliases
+7. If the question is unclear, return a simple 'SELECT * FROM "{table_name}" LIMIT 10'"""
 
         # User question becomes the user prompt
         user_prompt = f"Convert this to SQL: {question}"
