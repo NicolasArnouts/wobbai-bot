@@ -1,0 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "docker-compose.prod.yml"
+
+[deploy]
+healthcheckPath = "/health"
+restartPolicyType = "ALWAYS"
