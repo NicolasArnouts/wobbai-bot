@@ -1,12 +1,8 @@
 #!/bin/bash
 set -e
 
-# Create directories if they don't exist
-mkdir -p /var/run/celery /var/log/celery /data /tmp/uploads
+# Fix permissions on /data in case the attached volume is owned by root
+chown -R appuser:appuser /data
 
-# Set proper permissions for celery directories
-chown -R appuser:appuser /var/run/celery /var/log/celery /data /tmp/uploads
-chmod -R 755 /var/run/celery /var/log/celery /data /tmp/uploads
-
-echo "Starting supervisord..."
+# Start supervisord (which will run your services as defined in supervisord.conf)
 exec supervisord -c /app/supervisord.conf
