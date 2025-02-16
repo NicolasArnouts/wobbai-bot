@@ -6,6 +6,9 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y build-essential curl supervisor && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
 # Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -13,17 +16,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /data /tmp/uploads
-RUN chmod -R 777 /data /tmp/uploads
+# Create necessary directories and set permissions
+RUN mkdir -p /data /tmp/uploads && \
+    chown -R appuser:appuser /app /data /tmp/uploads && \
+    chmod -R 755 /data /tmp/uploads
 
-# Set RAILWAY_RUN_UID for volume permissions
-ENV RAILWAY_RUN_UID=0
+# Set non-root user for Railway
+ENV RAILWAY_RUN_UID=1000
 
 # Copy the supervisord config and entrypoint script and make them executable
 COPY supervisord.conf /app/supervisord.conf
 COPY entrypoint.supervisord.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Switch to non-root user
+USER appuser
 
 # Expose API port
 EXPOSE 8000
