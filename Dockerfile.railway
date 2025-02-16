@@ -3,10 +3,10 @@ FROM python:3.10-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (build-essential, curl, and supervisor)
 RUN apt-get update && apt-get install -y build-essential curl supervisor && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
+# Create a non-root user
 RUN useradd -m -u 1000 appuser
 
 # Copy and install Python dependencies
@@ -19,17 +19,14 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p /data /tmp/uploads /var/run/celery /var/log/celery
 
-# Set non-root user for Railway
-ENV RAILWAY_RUN_UID=1000
-
-# Copy the supervisord config and entrypoint script and make them executable
-COPY supervisord.conf /app/supervisord.conf
-COPY entrypoint.supervisord.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Set proper ownership for the app directory and data directories
+RUN chown -R appuser:appuser /app /data /tmp/uploads /var/run/celery /var/log/celery
 
 # Expose API port
 EXPOSE 8000
 
-# Use the entrypoint script to launch supervisord
-# Note: Entrypoint runs as root to set permissions, then supervisord switches to appuser
-ENTRYPOINT ["/entrypoint.sh"]
+# Switch to non-root user
+USER appuser
+
+# CMD: Re-chown /data (in case Railway mounts it as root) then run supervisord
+CMD sh -c "chown -R appuser:appuser /data && exec supervisord -c /app/supervisord.conf"
