@@ -16,10 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Create necessary directories and set permissions
-RUN mkdir -p /data /tmp/uploads && \
-    chown -R appuser:appuser /app /data /tmp/uploads && \
-    chmod -R 755 /data /tmp/uploads
+# Create necessary directories
+RUN mkdir -p /data /tmp/uploads /var/run/celery /var/log/celery
 
 # Set non-root user for Railway
 ENV RAILWAY_RUN_UID=1000
@@ -29,11 +27,9 @@ COPY supervisord.conf /app/supervisord.conf
 COPY entrypoint.supervisord.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Switch to non-root user
-USER appuser
-
 # Expose API port
 EXPOSE 8000
 
 # Use the entrypoint script to launch supervisord
-CMD ["/entrypoint.sh"]
+# Note: Entrypoint runs as root to set permissions, then supervisord switches to appuser
+ENTRYPOINT ["/entrypoint.sh"]
