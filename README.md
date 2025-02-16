@@ -45,11 +45,69 @@ pip install -r requirements.txt
 3. Create a `.env` file:
 ```bash
 DISCORD_TOKEN=your_discord_bot_token_here
+OPENAI_API_KEY=your_openai_api_key
+LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
+LANGFUSE_SECRET_KEY=your_langfuse_secret_key
 ```
 
 4. Build and start the services:
 ```bash
 docker compose up --build
+```
+
+## Deployment
+
+The application is configured for deployment on Railway with GitHub Actions CI/CD pipeline.
+
+### Prerequisites for Deployment
+
+1. Create a [Railway](https://railway.app) account
+2. Install the Railway CLI:
+```bash
+npm i -g @railway/cli
+```
+
+3. Login to Railway:
+```bash
+railway login
+```
+
+4. Set up GitHub repository secrets:
+- `RAILWAY_TOKEN`: Your Railway API token (get from Railway dashboard)
+- `RAILWAY_SERVICE_NAME`: The name of your Railway service
+
+### Deployment Process
+
+1. Push your code to GitHub:
+```bash
+git add .
+git commit -m "Your commit message"
+git push origin main
+```
+
+2. The GitHub Actions workflow will automatically:
+   - Run tests
+   - Deploy to Railway if tests pass
+   - Set up all required services (API, Celery, Discord bot, PostgreSQL, Redis)
+
+3. Configure environment variables in Railway:
+   - Go to your project settings in Railway
+   - Add the following variables:
+     - `DISCORD_TOKEN`
+     - `OPENAI_API_KEY`
+     - `LANGFUSE_PUBLIC_KEY`
+     - `LANGFUSE_SECRET_KEY`
+     - `LANGFUSE_HOST`
+
+4. Monitor deployment:
+   - Check GitHub Actions tab for deployment status
+   - View logs in Railway dashboard
+
+### Manual Deployment
+
+You can also deploy manually using the Railway CLI:
+```bash
+railway up
 ```
 
 ## Discord Commands
